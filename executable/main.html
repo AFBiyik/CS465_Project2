@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Assignment 2</title>
+
+    <script type="text/javascript" src="../source/Common/webgl-utils.js"></script>
+    <script type="text/javascript" src="../source/Common/initShaders.js"></script>
+    <script type="text/javascript" src="../source/Common/MV.js"></script>
+    <script type="text/javascript" src="../source/Common/jquery-3.4.1.min.js"></script>
+    <script type="text/javascript" src="../source/node.js"></script>
+    <script type="text/javascript" src="../source/mesh.js"></script>
+    <script type="text/javascript" src="../source/cat.js"></script>
+    <script type="text/javascript" src="../source/animation.js"></script>
+    <script type="text/javascript" src="../source/event-handlers.js"></script>
+    <script type="text/javascript" src="../source/main.js"></script>
+
+    <script id="vertex-shader" type="x-shader/x-vertex">
+
+    attribute vec4 vPosition;
+    attribute vec4 vNormal;
+    varying vec3 N;
+    varying vec3 L;
+    varying vec3 E;
+    uniform mat4 modelViewMatrix;
+    uniform mat4 projectionMatrix;
+    uniform vec4 lightPosition;
+    uniform vec3 eyePosition;
+
+    void main()
+    {
+        gl_Position = projectionMatrix * modelViewMatrix * vPosition;
+
+        vec3 pos = (modelViewMatrix * vPosition).xyz;
+
+        mat3 normalMatrix;
+        normalMatrix[0] = vec3(modelViewMatrix[0][0], modelViewMatrix[0][1], modelViewMatrix[0][2]);
+        normalMatrix[1] = vec3(modelViewMatrix[1][0], modelViewMatrix[1][1], modelViewMatrix[1][2]);
+        normalMatrix[2] = vec3(modelViewMatrix[2][0], modelViewMatrix[2][1], modelViewMatrix[2][2]);
+
+        N = normalize( normalMatrix*vNormal.xyz);
+        L = normalize( lightPosition.xyz - pos );
+        E =  normalize(eyePosition - pos);
+    }
+    </script>
+
+    <script id="fragment-shader" type="x-shader/x-fragment">
+
+    precision mediump float;
+
+    uniform vec4 ambientProduct;
+    uniform vec4 diffuseProduct;
+    uniform vec4 specularProduct;
+    uniform float shininess;
+    varying vec3 N;
+    varying vec3 L;
+    varying vec3 E;
+
+    void main()
+    {
+        vec4 fColor;
+
+        vec3 H = normalize( L + E );
+        vec4 ambient = ambientProduct;
+
+        float Kd = max( dot(L, N), 0.0 );
+        vec4  diffuse = Kd * diffuseProduct;
+
+        float Ks = pow( max(dot(N, H), 0.0), shininess );
+        vec4  specular = Ks * specularProduct;
+
+        if( dot(L, N) < 0.0 ) {
+            specular = vec4(0.0, 0.0, 0.0, 1.0);
+        }
+
+        fColor = ambient + diffuse + specular;
+        fColor.a = 1.0;
+
+        gl_FragColor = fColor;
+    }
+    </script>
+
+    <script id="grid-vertex-shader" type="x-shader/x-vertex">
+
+    attribute  vec4 vPosition;
+
+    uniform mat4 viewProjectionMatrix;
+
+    void main()
+    {
+        gl_Position = viewProjectionMatrix * vPosition;
+    }
+    </script>
+
+    <script id="grid-fragment-shader" type="x-shader/x-fragment">
+
+    precision mediump float;
+
+    void main()
+    {
+        gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+
+    }
+    </script>
+</head>
+<body>
+
+    <div style="display: inline-block;">
+        <canvas id="canvas" width="700" height="700">
+        Oops ... your browser doesn't support the HTML5 canvas element
+        </canvas>
+    </div>
+    <div style="padding: 10px; display: inline-block; border-style: solid; border-width: 1px; font-size: 11px; vertical-align: top;">
+        <div>
+            <b><u>Time:</u></b>
+            <input id="timeLabel" type="text" value="0:00:000" disabled size="6">
+            <input type="range" id="time" min="-180" max="60000" step="1" value="0" style="width: 80%;" disabled>
+            <br>
+            <input type="button" id="addKeyFrame" value="Add Key Frame">
+            <input type="button" id="deleteKeyFrame" value="Delete Key Frame">
+            <input type="button" id="animate" value="Start Animation">
+            <br>
+            <input type="button" id="saveAnimation" value="Save Animation">
+            Load Animation:
+            <input type="file" id="loadAnimation">
+            <br>
+            <b><u>Body:</u></b>
+            <br>
+            &nbsp&nbsp&nbsp&nbspx = <input id="bodyTransformXLabel" type="text" value="0" disabled size="2">
+            -200<input type="range" id="bodyTransformX" min="-200" max="200" step="1" value="0">200
+            | y = <input id="bodyTransformYLabel" type="text" value="0" disabled size="2">
+            -200<input type="range" id="bodyTransformY" min="-200" max="200" step="1" value="0">200
+            | z = <input id="bodyTransformZLabel" type="text" value="0" disabled size="2">
+            -200<input type="range" id="bodyTransformZ" min="-200" max="200" step="1" value="0">200
+            <br>
+            &nbsp&nbsp&nbsp&nbspPitch = <input id="bodyRotationPLabel" type="text" value="0" disabled size="2">
+            -360<input type="range" id="bodyRotationP" min="-360" max="360" step="1" value="0">360
+            | Yaw = <input id="bodyRotationYLabel" type="text" value="0" disabled size="2">
+            -360<input type="range" id="bodyRotationY" min="-360" max="360" step="1" value="0">360
+            | Roll = <input id="bodyRotationRLabel" type="text" value="0" disabled size="2">
+            -360<input type="range" id="bodyRotationR" min="-360" max="360" step="1" value="0">360
+            <br>
+            <b><u>Neck:</u></b>
+            <br>
+            &nbsp&nbsp&nbsp&nbspPitch = <input id="neckRotationPLabel" type="text" value="0" disabled size="2">
+            -40<input type="range" id="neckRotationP" min="-40" max="40" step="1" value="0">40
+            | Yaw = <input id="neckRotationYLabel" type="text" value="0" disabled size="2">
+            -20<input type="range" id="neckRotationY" min="-20" max="20" step="1" value="0">20
+            | Roll = <input id="neckRotationRLabel" type="text" value="0" disabled size="2">
+            -10<input type="range" id="neckRotationR" min="-10" max="10" step="1" value="0">10
+            <br>
+            <b><u>Head: rotate:</u></b>
+            <br>
+            &nbsp&nbsp&nbsp&nbspPitch = <input id="headRotationPLabel" type="text" value="0" disabled size="2">
+            -30<input type="range" id="headRotationP" min="-30" max="30" step="1" value="0">30
+            | Yaw = <input id="headRotationYLabel" type="text" value="0" disabled size="2">
+            -10<input type="range" id="headRotationY" min="-10" max="10" step="1" value="0">10
+            | Roll = <input id="headRotationRLabel" type="text" value="0" disabled size="2">
+            -10<input type="range" id="headRotationR" min="-10" max="10" step="1" value="0">10
+            <br>
+            <b><u>Tail 1: rotate:</u></b>
+            <br>
+            &nbsp&nbsp&nbsp&nbspYaw = <input id="tail_1YLabel" type="text" value="0" disabled size="2">
+            -40<input type="range" id="tail_1Y" min="-40" max="40" step="1" value="0">40
+            | Roll = <input id="tail_1RLabel" type="text" value="0" disabled size="2">
+            -60<input type="range" id="tail_1R" min="-60" max="60" step="1" value="0">60
+            <br>
+            <b><u>Tail 2:rotate:</u></b>
+            <br>
+            &nbsp&nbsp&nbsp&nbspYaw = <input id="tail_2YLabel" type="text" value="0" disabled size="2">
+            -40<input type="range" id="tail_2Y" min="-40" max="40" step="1" value="0">40
+            | Roll = <input id="tail_2RLabel" type="text" value="0" disabled size="2">
+            -60<input type="range" id="tail_2R" min="-60" max="60" step="1" value="0">60
+            <br>
+            <b><u>Tail 3:rotate:</u></b>
+            <br>
+            &nbsp&nbsp&nbsp&nbspYaw = <input id="tail_3YLabel" type="text" value="0" disabled size="2">
+            -40<input type="range" id="tail_3Y" min="-40" max="40" step="1" value="0">40
+            | Roll = <input id="tail_3RLabel" type="text" value="0" disabled size="2">
+            -60<input type="range" id="tail_3R" min="-60" max="60" step="1" value="0">60
+            <br>
+            <b><u>Tail 4:rotate:</u></b>
+            <br>
+            &nbsp&nbsp&nbsp&nbspYaw = <input id="tail_4YLabel" type="text" value="0" disabled size="2">
+            -40<input type="range" id="tail_4Y" min="-40" max="40" step="1" value="0">40
+            | Roll = <input id="tail_4RLabel" type="text" value="0" disabled size="2">
+            -60<input type="range" id="tail_4R" min="-40" max="60" step="1" value="0">60
+            <br>
+        </div>
+        <div style="width: 300px; float:left;">
+            <b><u>Front Left Upper Leg: rotate:</u></b>
+            <br>
+            &nbsp&nbsp&nbsp&nbspRoll = <input id="FLURLabel" type="text" value="0" disabled size="2">
+            -45<input type="range" id="FLUR" min="-45" max="80" step="1" value="0">80
+            <br>
+            <b><u>Front Left Bottom Leg: rotate:</u></b>
+            <br>
+            &nbsp&nbsp&nbsp&nbspRoll = <input id="FLBRLabel" type="text" value="0" disabled size="2">
+            -60<input type="range" id="FLBR" min="-60" max="0" step="1" value="0">0
+            <br>
+            <b><u>Front Right Upper Leg: rotate:</u></b>
+            <br>
+            &nbsp&nbsp&nbsp&nbspRoll = <input id="FRURLabel" type="text" value="0" disabled size="2">
+            -45<input type="range" id="FRUR" min="-45" max="80" step="1" value="0">80
+            <br>
+            <b><u>Front Right Bottom Leg: rotate:</u></b>
+            <br>
+            &nbsp&nbsp&nbsp&nbspRoll = <input id="FRBRLabel" type="text" value="0" disabled size="2">
+            -60<input type="range" id="FRBR" min="-60" max="0" step="1" value="0">0
+            <br>
+            <b><u>Back Left Upper Leg: rotate:</u></b>
+            <br>
+            &nbsp&nbsp&nbsp&nbspRoll = <input id="BLURLabel" type="text" value="0" disabled size="2">
+            -70<input type="range" id="BLUR" min="-70" max="70" step="1" value="0">70
+            <br>
+            <b><u>Back Left Bottom Leg: rotate:</u></b>
+            <br>
+            &nbsp&nbsp&nbsp&nbspRoll = <input id="BLBRLabel" type="text" value="0" disabled size="2">
+            -60<input type="range" id="BLBR" min="-60" max="0" step="1" value="0">0
+            <br>
+            <b><u>Back Right Upper Leg: rotate:</u></b>
+            <br>
+            &nbsp&nbsp&nbsp&nbspRoll = <input id="BRURLabel" type="text" value="0" disabled size="2">
+            -70<input type="range" id="BRUR" min="-70" max="70" step="1" value="0">70
+            <br>
+            <b><u>Back Right Bottom Leg: rotate:</u></b>
+            <br>
+            &nbsp&nbsp&nbsp&nbspRoll = <input id="BRBRLabel" type="text" value="0" disabled size="2">
+            -60<input type="range" id="BRBR" min="-60" max="0" step="1" value="0">0
+        </div>
+        <div style="margin-top: 10px; width: 200px; float:right;">
+            <b><u>Animation Frames:</u></b>
+            <br>
+            &nbsp&nbsp&nbsp&nbsp<select id="keyFramesSelect" size = "16" style="width: 100px;">
+            </select>
+        </div>
+
+    </div>
+
+</body>
+</html>
